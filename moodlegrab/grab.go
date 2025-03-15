@@ -12,18 +12,19 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 )
-type GrabClient struct{
-	MoodleUrl string 
-	UserName string
-	Passwd string
-	Client http.Client
 
-	LoginToken string
+type GrabClient struct {
+	MoodleUrl string
+	UserName  string
+	Passwd    string
+	Client    http.Client
+
+	LoginToken    string
 	MoodleSession string
-	SessKey string
+	SessKey       string
 }
 
-func (g *GrabClient) ParseSessKey(resp http.Response)(error){
+func (g *GrabClient) ParseSessKey(resp http.Response) error {
 	doc, err := goquery.NewDocumentFromReader(resp.Body)
 	if err != nil {
 		fmt.Println("Failed to parse HTML:", err)
@@ -38,22 +39,22 @@ func (g *GrabClient) ParseSessKey(resp http.Response)(error){
 			}
 		}
 	})
-	log.Println("sesskey",g.SessKey)
+	log.Println("sesskey", g.SessKey)
 	return nil
 }
-func (g *GrabClient) makereq(endpoint,method string,data string,isJson bool)(*http.Request,error){
+func (g *GrabClient) makereq(endpoint, method string, data string, isJson bool) (*http.Request, error) {
 	req, err := http.NewRequest(method, g.MoodleUrl+endpoint, strings.NewReader(data))
 	if err != nil {
-		return nil,fmt.Errorf("Failed to create POST request: %v", err)
+		return nil, fmt.Errorf("Failed to create POST request: %v", err)
 	}
 	req.Header.Set("Accept-Encoding", "*")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 	req.Header.Set("Cache-Control", "max-age=0")
 	req.Header.Set("Connection", "keep-alive")
-	if isJson{
+	if isJson {
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Accept", "application/json, text/javascript, */*; q=0.01")
-	}else{
+	} else {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
 	}
@@ -66,27 +67,27 @@ func (g *GrabClient) makereq(endpoint,method string,data string,isJson bool)(*ht
 	req.Header.Set("sec-ch-ua", `"Chromium";v="134", "Not:A-Brand";v="24", "Google Chrome";v="134"`)
 	req.Header.Set("sec-ch-ua-mobile", "?0")
 	req.Header.Set("sec-ch-ua-platform", `"Linux"`)
-	
-	if g.MoodleSession != ""{
-		req.Header.Set("Cookie", "MoodleSession=" + g.MoodleSession)
+
+	if g.MoodleSession != "" {
+		req.Header.Set("Cookie", "MoodleSession="+g.MoodleSession)
 	}
-	return req,nil
+	return req, nil
 }
-func (g *GrabClient) fetchOriginCookiesAndToken()(error){
-	req,err:=g.makereq("/login/index.php","GET","",false)
-	if err!=nil{
+func (g *GrabClient) fetchOriginCookiesAndToken() error {
+	req, err := g.makereq("/login/index.php", "GET", "", false)
+	if err != nil {
 		return err
 	}
-	resp,err := g.Client.Do(req)
-	if err!=nil{
+	resp, err := g.Client.Do(req)
+	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
 	cookies := resp.Cookies()
-	for _,cookie := range cookies{
+	for _, cookie := range cookies {
 		log.Printf("Cookie: %s = %s", cookie.Name, cookie.Value)
-		if cookie.Name == "MoodleSession"{
-			g.MoodleSession=cookie.Value
+		if cookie.Name == "MoodleSession" {
+			g.MoodleSession = cookie.Value
 		}
 	}
 	doc, err := goquery.NewDocumentFromReader(resp.Body)
@@ -97,26 +98,26 @@ func (g *GrabClient) fetchOriginCookiesAndToken()(error){
 	if !exists {
 		return fmt.Errorf("logintoken not exist")
 	}
-	g.LoginToken=token
-	log.Println("logintoken",token)
+	g.LoginToken = token
+	log.Println("logintoken", token)
 	return nil
 }
-func (g *GrabClient) GrepCourses()(error){
+func (g *GrabClient) GrepCourses() error {
 	data := `[{"index":0,"methodname":"core_course_get_enrolled_courses_by_timeline_classification","args":{"offset":0,"limit":0,"classification":"all","sort":"fullname","customfieldname":"","customfieldvalue":""}}]`
-	req,err:=g.makereq(fmt.Sprintf("/lib/ajax/service.php?sesskey=%s&info=core_course_get_enrolled_courses_by_timeline_classification",g.SessKey),"POST",data,true)
+	req, err := g.makereq(fmt.Sprintf("/lib/ajax/service.php?sesskey=%s&info=core_course_get_enrolled_courses_by_timeline_classification", g.SessKey), "POST", data, true)
 	resp, err := g.Client.Do(req)
 	if err != nil {
 		return fmt.Errorf("Failed to execute POST request: %v", err)
 	}
 	defer resp.Body.Close()
-	body,err:=io.ReadAll(resp.Body)
-	if err!=nil{
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
 		return fmt.Errorf("error parsing body")
 	}
 	var Moodlewp []MoodleJson
-    err = json.Unmarshal([]byte(body), &Moodlewp)
-	if Moodlewp[0].Error{
-		return fmt.Errorf("Error in core_course_get_enrolled_courses_by_timeline_classification. %v",body)
+	err = json.Unmarshal([]byte(body), &Moodlewp)
+	if Moodlewp[0].Error {
+		return fmt.Errorf("Error in core_course_get_enrolled_courses_by_timeline_classification. %v", body)
 	}
 	for _, course := range Moodlewp[0].Data.Courses {
 		fmt.Println("-----------------------------------------")
@@ -128,14 +129,14 @@ func (g *GrabClient) GrepCourses()(error){
 		fmt.Printf("View URL: %s\n", course.ViewURL)
 		fmt.Printf("Course Category: %s\n", course.CourseCategory)
 		fmt.Println()
-		req,err = g.makereq(fmt.Sprintf("/lib/ajax/service.php?sesskey=%s&info=core_courseformat_get_state",g.SessKey),"POST",fmt.Sprintf(`[ { "index": 0, "methodname": "core_courseformat_get_state", "args": { "courseid": %d } } ]`,course.ID),true)
-		resp,err = g.Client.Do(req)
-		if err != nil{
+		req, err = g.makereq(fmt.Sprintf("/lib/ajax/service.php?sesskey=%s&info=core_courseformat_get_state", g.SessKey), "POST", fmt.Sprintf(`[ { "index": 0, "methodname": "core_courseformat_get_state", "args": { "courseid": %d } } ]`, course.ID), true)
+		resp, err = g.Client.Do(req)
+		if err != nil {
 			return fmt.Errorf("Failed to get core_courseformat_get_state: %v", err)
 		}
 		defer resp.Body.Close()
-		body,err =io.ReadAll(resp.Body)
-		if err!=nil{
+		body, err = io.ReadAll(resp.Body)
+		if err != nil {
 			return fmt.Errorf("error parsing body")
 		}
 		var Moodlejsonjson []MoodleJsonJson
@@ -145,23 +146,23 @@ func (g *GrabClient) GrepCourses()(error){
 
 	return nil
 }
-func (g *GrabClient) Parse1Course(data string){
+func (g *GrabClient) Parse1Course(data string) {
 	var Moodlejsonjson DetailedMoodleJson
 	err := json.Unmarshal([]byte(data), &Moodlejsonjson)
-	if err!=nil{
+	if err != nil {
 		log.Println(err)
 	}
 	cmMap := make(map[string]DetailedMoodleJson_Cm)
-	for _,cm := range Moodlejsonjson.Cm{
+	for _, cm := range Moodlejsonjson.Cm {
 		cmMap[cm.ID] = cm
 	}
-	for _,DetailSection := range Moodlejsonjson.Section{
-		fmt.Printf("Title :%s\n",DetailSection.Title)
-		for _,cm := range DetailSection.CmList{
-			fmt.Printf("        CM :%s\n",cm)
-			if cm_,found := cmMap[cm];found{
-				fmt.Printf("        url :%s\n",cm_.URL)
-				req,err := g.makereq(strings.Replace(cm_.URL, g.MoodleUrl, "", 1),"GET","",false)
+	for _, DetailSection := range Moodlejsonjson.Section {
+		fmt.Printf("Title :%s\n", DetailSection.Title)
+		for _, cm := range DetailSection.CmList {
+			fmt.Printf("        CM :%s\n", cm)
+			if cm_, found := cmMap[cm]; found {
+				fmt.Printf("        url :%s\n", cm_.URL)
+				req, err := g.makereq(strings.Replace(cm_.URL, g.MoodleUrl, "", 1), "GET", "", false)
 				resp, err := g.Client.Do(req)
 				if err != nil {
 					log.Printf("Failed to get URL %s: %v", cm_.URL, err)
@@ -177,41 +178,41 @@ func (g *GrabClient) Parse1Course(data string){
 		}
 	}
 }
-func (g *GrabClient) Login()(error){
-	err:=g.fetchOriginCookiesAndToken()
-	if err!=nil{
+func (g *GrabClient) Login() error {
+	err := g.fetchOriginCookiesAndToken()
+	if err != nil {
 		return fmt.Errorf("Error in Fetch Origin Cookies And Token")
 	}
 	data := url.Values{}
 	data.Set("username", g.UserName)
 	data.Set("password", g.Passwd)
 	data.Set("logintoken", g.LoginToken)
-	data.Set("anchor","")
+	data.Set("anchor", "")
 
-	req,err:=g.makereq("/login/index.php","POST",data.Encode(),false)
-	
+	req, err := g.makereq("/login/index.php", "POST", data.Encode(), false)
+
 	resp, err := g.Client.Do(req)
 	if err != nil {
 		return fmt.Errorf("Failed to execute POST request: %v", err)
 	}
-	log.Println("StatCode = ",resp.StatusCode)
+	log.Println("StatCode = ", resp.StatusCode)
 	defer resp.Body.Close()
 	cookies := resp.Cookies()
 	for _, cookie := range cookies {
 		log.Printf("Cookie: %s = %s", cookie.Name, cookie.Value)
-		if cookie.Name == "MoodleSession"{
+		if cookie.Name == "MoodleSession" {
 			g.MoodleSession = cookie.Value
 		}
 	}
-	
-	req,err=g.makereq("","GET","",false)
-	resp,err=g.Client.Do(req)
-	if err!=nil{
+
+	req, err = g.makereq("", "GET", "", false)
+	resp, err = g.Client.Do(req)
+	if err != nil {
 		return fmt.Errorf("Failed to execute GET request: %v", err)
 	}
 	defer resp.Body.Close()
 
 	log.Println("Login successful")
-	err=g.ParseSessKey(*resp)
+	err = g.ParseSessKey(*resp)
 	return nil
 }
