@@ -42,6 +42,7 @@ func (g *GrabClient) ParseSessKey(resp http.Response) error {
 	log.Println("sesskey", g.SessKey)
 	return nil
 }
+
 func (g *GrabClient) makereq(endpoint, method string, data string, isJson bool) (*http.Request, error) {
 	req, err := http.NewRequest(method, g.MoodleUrl+endpoint, strings.NewReader(data))
 	if err != nil {
@@ -146,7 +147,7 @@ func (g *GrabClient) GrepCourses() error {
 
 	return nil
 }
-func (g *GrabClient) Parse1Course(data string) {
+func (g *GrabClient) Parse1Course(data string) error {
 	var Moodlejsonjson DetailedMoodleJson
 	err := json.Unmarshal([]byte(data), &Moodlejsonjson)
 	if err != nil {
@@ -170,13 +171,43 @@ func (g *GrabClient) Parse1Course(data string) {
 				}
 				defer resp.Body.Close()
 				finalURL := resp.Request.URL.String()
-				if resp.StatusCode == http.StatusSeeOther {
+				if resp.StatusCode == http.StatusSeeOther { //303
 					finalURL = resp.Header.Get("Location")
-					fmt.Printf("        final url :%s\n", finalURL)
+					if strings.HasSuffix(finalURL, ".pdf") {
+						fmt.Printf("        PDF :%s\n", finalURL)
+					} else {
+						fmt.Printf("        File url :%s\n", finalURL)
+					}
+				} else {
+					doc, err := goquery.NewDocumentFromReader(resp.Body)
+					if err != nil {
+						return err
+					}
+					doc.Find("video source").Each(func(i int, s *goquery.Selection) {
+						videoSrc, exists := s.Attr("src")
+						if exists {
+							fmt.Printf("        Video (#%d): %s\n", i+1, videoSrc)
+						}
+					})
+					doc.Find("audio source").Each(func(i int, s *goquery.Selection) {
+						audioSrc, exists := s.Attr("src")
+						if exists {
+							fmt.Printf("        Audio (#%d): %s\n", i+1, audioSrc)
+						}
+					})
+					doc.Find("div.urlworkaround a").Each(func(i int, s *goquery.Selection) {
+						// 提取 <a> 标签的 href 属性
+						href, exists := s.Attr("href")
+						if exists {
+							fmt.Printf("        Outer Url (#%d): %s\n", i+1, href)
+						}
+					})
 				}
+
 			}
 		}
 	}
+	return nil
 }
 func (g *GrabClient) Login() error {
 	err := g.fetchOriginCookiesAndToken()
